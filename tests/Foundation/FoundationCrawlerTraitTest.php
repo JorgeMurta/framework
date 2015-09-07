@@ -2,17 +2,23 @@
 
 use Mockery as m;
 use Illuminate\Foundation\Testing\CrawlerTrait;
+use Symfony\Component\DomCrawler\Crawler;
 
 class FoundationCrawlerTraitTest extends PHPUnit_Framework_TestCase
 {
     use CrawlerTrait;
+
+    public function setUp()
+    {
+        $this->crawler = m::mock(Crawler::class)->makePartial();
+    }
 
     public function tearDown()
     {
         m::close();
     }
 
-    public function testSeeInFieldInput()
+    protected function mockInput($value)
     {
         $input = m::mock(Crawler::class)->makePartial();
         $input->shouldReceive('count')->andReturn(1);
@@ -20,33 +26,59 @@ class FoundationCrawlerTraitTest extends PHPUnit_Framework_TestCase
         $input->shouldReceive('attr')
             ->withArgs(['value'])
             ->once()
-            ->andReturn('Laravel');
+            ->andReturn($value);
 
-        $this->crawler = m::mock(Crawler::class)->makePartial();
+        return $input;
+    }
 
+    public function testSeeInFieldInput()
+    {
         $this->crawler->shouldReceive('filter')
             ->withArgs(["*#framework, *[name='framework']"])
             ->once()
-            ->andReturn($input);
+            ->andReturn($this->mockInput('Laravel'));
 
         $this->seeInField('framework', 'Laravel');
     }
 
-    public function testSeeInFieldTextarea()
+    public function testDontSeeInFieldInput()
+    {
+        $this->crawler->shouldReceive('filter')
+            ->withArgs(["*#framework, *[name='framework']"])
+            ->once()
+            ->andReturn($this->mockInput('Laravel'));
+
+        $this->dontSeeInField('framework', 'Rails');
+    }
+
+    protected function mockTextarea($value)
     {
         $textarea = m::mock(Crawler::class)->makePartial();
         $textarea->shouldReceive('count')->andReturn(1);
         $textarea->shouldReceive('nodeName')->once()->andReturn('textarea');
-        $textarea->shouldReceive('text')->once()->andReturn('Laravel is awesome');
+        $textarea->shouldReceive('text')->once()->andReturn($value);
 
-        $this->crawler = m::mock(Crawler::class)->makePartial();
+        return $textarea;
+    }
 
+    public function testSeeInFieldTextarea()
+    {
         $this->crawler->shouldReceive('filter')
             ->withArgs(["*#description, *[name='description']"])
             ->once()
-            ->andReturn($textarea);
+            ->andReturn($this->mockTextarea('Laravel is awesome'));
 
         $this->seeInField('description', 'Laravel is awesome');
+    }
+
+    public function testDontSeeInFieldTextarea()
+    {
+        $this->crawler->shouldReceive('filter')
+            ->withArgs(["*#description, *[name='description']"])
+            ->once()
+            ->andReturn($this->mockTextarea('Laravel is awesome'));
+
+        $this->dontSeeInField('description', 'Rails is awesome');
     }
 
     /**
@@ -59,14 +91,96 @@ class FoundationCrawlerTraitTest extends PHPUnit_Framework_TestCase
         $select->shouldReceive('count')->andReturn(1);
         $select->shouldReceive('nodeName')->once()->andReturn('select');
 
-        $this->crawler = m::mock(Crawler::class)->makePartial();
-
         $this->crawler->shouldReceive('filter')
             ->withArgs(["*#select, *[name='select']"])
             ->once()
             ->andReturn($select);
 
         $this->seeInField('select', 'selected_value');
+    }
+
+    protected function mockSelect()
+    {
+        $optionEmpty = m::mock(Crawler::class)->makePartial();
+        $optionEmpty->shouldReceive('hasAttribute')
+            ->withArgs(['selected'])
+            ->once()
+            ->andReturn(false);
+
+        $optionFullTime = m::mock(Crawler::class)->makePartial();
+        $optionFullTime->shouldReceive('hasAttribute')
+            ->withArgs(['selected'])
+            ->once()
+            ->andReturn(true);
+        $optionFullTime->shouldReceive('getAttribute')
+            ->withArgs(['value'])
+            ->once()
+            ->andReturn('full_time');
+
+        $select = m::mock(Crawler::class)->makePartial();
+        $select->shouldReceive('count')
+            ->once()
+            ->andReturn(1);
+        $select->shouldReceive('nodeName')
+            ->twice()
+            ->andReturn('select');
+        $select->shouldReceive('children')
+            ->once()
+            ->andReturn([$optionEmpty, $optionFullTime]);
+
+        return $select;
+    }
+
+    public function testSeeIsSelected()
+    {
+        $this->crawler->shouldReceive('filter')
+            ->withArgs(["*#availability, *[name='availability']"])
+            ->once()
+            ->andReturn($this->mockSelect());
+
+        $this->seeIsSelected('availability', 'full_time');
+    }
+
+    public function testDontSeeIsSelected()
+    {
+        $this->crawler->shouldReceive('filter')
+            ->withArgs(["*#availability, *[name='availability']"])
+            ->once()
+            ->andReturn($this->mockSelect());
+
+        $this->dontSeeIsSelected('availability', 'partial_time');
+    }
+
+    protected function mockCheckbox($checked = true)
+    {
+        $checkbox = m::mock(Crawler::class)->makePartial();
+        $checkbox->shouldReceive('count')->andReturn(1);
+        $checkbox->shouldReceive('attr')
+            ->withArgs(['checked'])
+            ->once()
+            ->andReturn($checked ? 'checked' : null);
+
+        return $checkbox;
+    }
+
+    public function testSeeIsChecked()
+    {
+        $this->crawler->shouldReceive('filter')
+            ->withArgs(["input[type='checkbox']#terms, input[type='checkbox'][name='terms']"])
+            ->once()
+            ->andReturn($this->mockCheckbox(true));
+
+        $this->seeIsChecked('terms');
+    }
+
+    public function testDontSeeIsChecked()
+    {
+        $this->crawler->shouldReceive('filter')
+            ->withArgs(["input[type='checkbox']#terms, input[type='checkbox'][name='terms']"])
+            ->once()
+            ->andReturn($this->mockCheckbox(false));
+
+        $this->dontSeeIsChecked('terms');
     }
 
     public function testExtractsRequestParametersFromForm()
